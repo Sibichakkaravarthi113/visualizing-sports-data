@@ -1,0 +1,98 @@
+library(shiny) 
+library(dplyr)` 
+library(ggplot2) 
+library(plotly) 
+library(readr) 
+matches <- read_csv("matches.csv") 
+deliveries <- read_csv("deliveries.csv") 
+ui <- fluidPage( 
+titlePanel("IPL Player & Team Performance Dashboard"), 
+sidebarLayout( 
+sidebarPanel( 
+selectInput("season", "Season:", choices = unique(matches$season), selected = 
+max(matches$season)), 
+selectInput("player", "Select a Player:", choices = unique(deliveries$batter)), 
+selectInput("team", "Select a Team:", choices = unique(deliveries$batting_team)) 
+), 
+mainPanel( 
+tabsetPanel( 
+tabPanel("Top Run Scorers", plotlyOutput("topScorers")), 
+tabPanel("Top Scorers by Season", plotlyOutput("scorersBySeason")), 
+tabPanel("Strike Rate Comparison", plotlyOutput("strikeRate")), 
+tabPanel("Performance Over Time", plotlyOutput("trendPlot")), 
+tabPanel("Team-wise Runs", plotlyOutput("teamRuns")) 
+) 
+) 
+) 
+) 
+server <- function(input, output) { 
+output$topScorers <- renderPlotly({ 
+top_runs <- deliveries %>% 
+group_by(batter) %>% 
+summarise(Runs = sum(batsman_runs)) %>% 
+arrange(desc(Runs)) %>% 
+head(10) 
+gg <- ggplot(top_runs, aes(x = reorder(batter, Runs), y = Runs, fill = batter)) + 
+geom_col() + 
+coord_flip() + 
+labs(title = "Top 10 Run Scorers", x = "Player", y = "Total Runs") 
+ggplotly(gg) 
+}) 
+output$scorersBySeason <- renderPlotly({ 
+top_season <- matches %>% 
+filter(season == input$season) %>% 
+select(id) %>% 
+inner_join(deliveries, by = c("id" = "match_id")) %>% 
+group_by(batter) %>% 
+summarise(Runs = sum(batsman_runs)) %>% 
+arrange(desc(Runs)) %>% 
+head(10) 
+gg <- ggplot(top_season, aes(x = reorder(batter, Runs), y = Runs, fill = batter)) + 
+geom_col() + 
+coord_flip() + 
+labs(title = paste("Top Scorers - Season", input$season), x = "Player", y = "Runs") 
+ggplotly(gg) 
+}) 
+output$strikeRate <- renderPlotly({ 
+sr_data <- deliveries %>% 
+group_by(batter) %>% 
+summarise(Runs = sum(batsman_runs), Balls = n()) %>% 
+mutate(StrikeRate = round((Runs / Balls) * 100, 2)) %>% 
+arrange(desc(StrikeRate)) %>% 
+filter(Runs > 200) %>% 
+head(10) 
+gg <- ggplot(sr_data, aes(x = reorder(batter, StrikeRate), y = StrikeRate, fill = 
+batter)) + 
+geom_col() + 
+coord_flip() + 
+labs(title = "Top Strike Rates (Min 200 Runs)", x = "Player", y = "Strike Rate") 
+ggplotly(gg) 
+}) 
+output$trendPlot <- renderPlotly({ 
+trends <- matches %>% 
+inner_join(deliveries, by = c("id" = "match_id")) %>% 
+filter(batter == input$player) %>% 
+group_by(season) %>% 
+summarise(Runs = sum(batsman_runs)) 
+gg <- ggplot(trends, aes(x = season, y = Runs)) + 
+geom_line(color = "blue") + 
+geom_point() + 
+labs(title = paste("Performance Trend for", input$player), x = "Season", y = 
+"Runs") 
+ggplotly(gg) 
+}) 
+output$teamRuns <- renderPlotly({ 
+team_data <- deliveries %>% 
+filter(batting_team == input$team) %>% 
+group_by(batter) %>% 
+summarise(Runs = sum(batsman_runs)) %>% 
+arrange(desc(Runs)) %>% 
+head(10) 
+gg <- ggplot(team_data, aes(x = reorder(batter, Runs), y = Runs, fill = batter)) + 
+geom_col() + 
+coord_flip() + 
+labs(title = paste("Top Scorers for", input$team), x = "Player", y = "Runs") 
+ggplotly(gg) 
+}) 
+} 
+shinyApp(ui = ui, server = server) 
